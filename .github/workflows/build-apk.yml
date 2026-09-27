@@ -1,4 +1,4 @@
-name: Build Smart Crypto Watch APK
+name: Build Maximum Compatibility APK
 
 on:
   workflow_dispatch:
@@ -10,21 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Install Android SDK packages
+      - name: Android SDK
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
@@ -32,24 +32,50 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Unpack app source
+      - name: Unpack source
         run: |
           rm -rf buildsrc
           mkdir buildsrc
           unzip -q SmartCryptoWatch-GitHubBuild.zip -d buildsrc
 
-      - name: Make compatibility build
+      - name: Configure compatibility
         working-directory: buildsrc/SmartCryptoWatch
         run: |
-          sed -i "s/applicationId 'com.smartcryptowatch.app'/applicationId 'com.smartcryptowatch.compat'/" app/build.gradle
-          sed -i "s/minSdk 26/minSdk 23/" app/build.gradle
-          sed -i "s/targetSdk 35/targetSdk 31/" app/build.gradle
-          sed -i "s/versionCode 1/versionCode 2/" app/build.gradle
+          sed -i "s/applicationId 'com.smartcryptowatch.app'/applicationId 'com.smartcryptowatch.finalcompat'/" app/build.gradle
+          sed -i "s/minSdk 26/minSdk 21/" app/build.gradle
+          sed -i "s/targetSdk 35/targetSdk 28/" app/build.gradle
+          sed -i "s/versionCode 1/versionCode 10/" app/build.gradle
           gradle --no-daemon assembleDebug
+
+      - name: Re-sign APK
+        working-directory: buildsrc/SmartCryptoWatch
+        run: |
+          keytool -genkeypair \
+            -keystore compat.keystore \
+            -storepass android \
+            -keypass android \
+            -alias compat \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=SmartCryptoWatch"
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks compat.keystore \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --v4-signing-enabled false \
+            --out SmartCryptoWatch-Final.apk \
+            app/build/outputs/apk/debug/app-debug.apk
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose SmartCryptoWatch-Final.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SmartCryptoWatch-Compat-APK
-          path: buildsrc/SmartCryptoWatch/app/build/outputs/apk/debug/app-debug.apk
+          name: SmartCryptoWatch-Final-APK
+          path: buildsrc/SmartCryptoWatch/SmartCryptoWatch-Final.apk
           if-no-files-found: error
