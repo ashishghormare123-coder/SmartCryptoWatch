@@ -1,0 +1,60 @@
+name: Build Smart Market Watch Ultra 12 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "platform-tools"             "platforms;android-35"             "build-tools;35.0.0"
+
+      - name: Unpack v12 project
+        run: |
+          rm -rf buildsrc
+          mkdir buildsrc
+          unzip -q SmartCryptoWatch-GitHubBuild-v12.zip -d buildsrc
+          test -f buildsrc/SmartMarketWatchUltraMultiChain/app/build.gradle
+          test -f buildsrc/SmartMarketWatchUltraMultiChain/app/smw-debug.keystore
+
+      - name: Build APK
+        working-directory: buildsrc/SmartMarketWatchUltraMultiChain
+        run: gradle --no-daemon clean :app:assembleDebug
+
+      - name: Verify APK signature
+        working-directory: buildsrc/SmartMarketWatchUltraMultiChain
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | head -50
+          cp "$APK" SmartMarketWatchUltraFreshBTC-v12.apk
+          sha256sum SmartMarketWatchUltraFreshBTC-v12.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartMarketWatchUltraFreshBTC-v12-APK
+          path: buildsrc/SmartMarketWatchUltraMultiChain/SmartMarketWatchUltraFreshBTC-v12.apk
+          if-no-files-found: error
+          retention-days: 30
